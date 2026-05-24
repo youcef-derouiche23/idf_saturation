@@ -1,0 +1,7 @@
+[2026-05-24 14:11:56] [INFO] 🚀 DÉMARRAGE PIPELINE LOCAL (PANDAS + PostgreSQL)
+[2026-05-24 14:11:56] [INFO] Timestamp : 2026-05-24 14:11:56
+[2026-05-24 14:11:56] [ERROR] 🔥 ERREUR FATALE : Erreur de connexion DB : connection to server at "localhost" (::1), port 5433 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "localhost" (127.0.0.1), port 5433 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+

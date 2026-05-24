@@ -1,0 +1,181 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║  📊 PROJET IDFM - FRÉQUENTATION ET RÉGULARITÉ DU RÉSEAU FERRÉ              ║
+║  Analyse Big Data - Île-de-France                                         ║
+║  Créé : 24 mai 2026                                                       ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📋 FICHIERS À CONSULTER EN PREMIER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. 🌟 QUICK_START.md
+   └─ Lance tout en 2 minutes (recommandé pour commencer)
+   
+2. 📖 GUIDE_EXECUTION_COMPLET.md  
+   └─ Guide détaillé complet (à lire avant de lancer)
+   
+3. ✅ STATUS.md
+   └─ Résumé du statut du projet et checklist
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📁 STRUCTURE DES FICHIERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 SCRIPTS À LANCER
+───────────────────────────────────────────────────────────────────────────
+ start_full_pipeline.sh      ⭐ Script principal (Docker + pipeline)
+ run_spark_pipeline.sh          Pipeline Spark complet
+ setup_spark_env.sh             Configuration Spark
+ run_spark_simple.py            Lancement Spark (Python)
+ pipeline_local.py              Pipeline local (pandas + PostgreSQL)
+ test_csv_files.py              Validation des fichiers CSV
+ data_loader.py                 Ingestion simple (deprecated)
+
+🔧 CODE MÉTIER
+───────────────────────────────────────────────────────────────────────────
+ feeder.py                      Ingestion CSV → Parquet HDFS
+ processor.py                   Transformation + agrégations + window functions
+ datamart.py                    Création 4 datamarts PostgreSQL
+
+🌐 API & DASHBOARD
+───────────────────────────────────────────────────────────────────────────
+ api/app.py                     API REST (FastAPI) - 10+ endpoints
+ api/auth.py                    Authentification JWT
+ api/database.py                Gestion PostgreSQL
+ api/models.py                  Schémas Pydantic
+ api/__init__.py                
+ dashboard/app.py               Dashboard Streamlit
+
+⚙️ CONFIGURATION
+───────────────────────────────────────────────────────────────────────────
+ config/config.ini              Configuration centralisée
+ requirements.txt               Dépendances Python
+
+📊 DONNÉES
+───────────────────────────────────────────────────────────────────────────
+ data/arrets.csv                Référentiel des stations
+ data/validations-reseau-ferre-profils-horaires-par-jour-type-3eme-trimestre.csv
+ data/ponctualite-mensuelle-transilien.csv
+ data/histo-validations-reseau-ferre.csv
+
+📚 DOCUMENTATION
+───────────────────────────────────────────────────────────────────────────
+ QUICK_START.md                 ⭐ Démarrage rapide (2 min)
+ GUIDE_EXECUTION_COMPLET.md     ⭐ Guide détaillé (à lire)
+ STATUS.md                      ⭐ Statut et checklist
+ GUIDE_SPARK_PIPELINE.md        Guide Spark détaillé
+ GUIDE_DEMARRAGE_CSV.md         Intégration CSV
+ README_UPDATED.md              README modernisé
+ README.md                      Documentation originale
+ STRUCTURE_COMPLETE.md          Structure tables détail
+ TRANSFORMATIONS.md             Transformations Spark SQL
+ WINDOW_FUNCTIONS.md            Exemples window functions
+ INDEX.md                       Index détaillé
+
+📂 RÉPERTOIRES
+───────────────────────────────────────────────────────────────────────────
+ logs/                          Fichiers de log (générés au runtime)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 WORKFLOW RECOMMANDÉ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ÉTAPE 1: Lire la documentation
+  └─ cat QUICK_START.md
+  └─ cat GUIDE_EXECUTION_COMPLET.md
+
+ÉTAPE 2: Lancer PostgreSQL (une fois)
+  └─ docker run ... postgres:15
+
+ÉTAPE 3: Lancer le pipeline
+  └─ bash start_full_pipeline.sh
+
+ÉTAPE 4: Lancer API + Dashboard
+  └─ Terminal 1: cd api && python -m uvicorn app:app --reload
+  └─ Terminal 2: streamlit run dashboard/app.py
+
+ÉTAPE 5: Accéder aux services
+  └─ API Swagger: http://localhost:8000/docs
+  └─ Dashboard: http://localhost:8501
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 DATAMARTS CRÉÉS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DM1: dm_frequentation_par_station_ligne
+    └─ Fréquentation par station/ligne/heure
+    └─ Cas d'usage: Identifier les stations saturées
+
+DM2: dm_regularite_par_ligne
+    └─ Régularité des lignes
+    └─ Cas d'usage: Comparer la ponctualité
+
+DM3: dm_evolution_frequentation
+    └─ Évolution temporelle
+    └─ Cas d'usage: Analyser les tendances
+
+DM4: dm_saturation_ml
+    └─ Features pour modèle ML
+    └─ Cas d'usage: Prédire les saturations futures
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔐 AUTHENTIFICATION API
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Login:    admin
+Password: admin
+
+Endpoints publics: /,  /auth/login
+Endpoints privés:  /data/*, /stats/*, /datamarts/* (JWT requis)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ NOTES IMPORTANTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• macOS ARM64 : Utiliser pipeline_local.py (pas de problèmes NumPy/Spark)
+• PostgreSQL : Port 5433 (pas 5432)
+• Spark : Nécessite JVM 11+ si utilisation
+• CSV : Tous validés (test_csv_files.py ✅ 4/4)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 COMMANDE ONE-LINER (démarrage rapide)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+docker run --name postgres-idfm -e POSTGRES_PASSWORD=idfm_pass \
+  -e POSTGRES_USER=idfm_user -e POSTGRES_DB=idfm_datamarts \
+  -p 5433:5432 -d postgres:15 && sleep 5 && \
+cd /Users/youcef/Downloads/Projet_IDFM_Frequentation && \
+bash start_full_pipeline.sh && \
+echo "✅ Pipeline terminé!" && \
+echo "Terminal 1: cd api && python -m uvicorn app:app --reload --port 8000" && \
+echo "Terminal 2: streamlit run dashboard/app.py" && \
+echo "URLs: http://localhost:8000/docs et http://localhost:8501"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🆘 BESOIN D'AIDE ?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Consulter les logs:
+   tail -f logs/pipeline_local_*.log
+
+2. Vérifier PostgreSQL:
+   psql -h localhost -p 5433 -U idfm_user -d idfm_datamarts
+
+3. Vérifier les CSV:
+   ls -la data/
+
+4. Relancer le pipeline:
+   bash start_full_pipeline.sh
+
+5. Lire la documentation:
+   cat GUIDE_EXECUTION_COMPLET.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Créé le 24 mai 2026 | Projet Big Data IDFM | 🚀

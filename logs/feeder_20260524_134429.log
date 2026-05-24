@@ -1,0 +1,28 @@
+WARNING: Using incubator modules: jdk.incubator.vector
+[2026-05-24 13:44:32] [INFO] 🚀 DÉMARRAGE FEEDER
+[2026-05-24 13:44:32] [INFO] Timestamp : 2026-05-24 13:44:32
+[2026-05-24 13:44:32] [ERROR] 🔥 ERREUR FATALE : 
+
+IMPORTANT: PLEASE READ THIS FOR ADVICE ON HOW TO SOLVE THIS ISSUE!
+
+Importing the numpy C-extensions failed. This error can happen for
+many reasons, often due to issues with your setup or how NumPy was
+installed.
+
+We have compiled some common reasons and troubleshooting tips at:
+
+    https://numpy.org/devdocs/user/troubleshooting-importerror.html
+
+Please note and check the following:
+
+  * The Python version is: Python 3.13 from "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
+  * The NumPy version is: "2.4.4"
+
+and make sure that they are the versions you expect.
+
+Please carefully study the information and documentation linked above.
+This is unlikely to be a NumPy issue but will be caused by a bad install
+or environment on your machine.
+
+Original error was: dlopen(/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/numpy/_core/_multiarray_umath.cpython-313-darwin.so, 0x0002): tried: '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/numpy/_core/_multiarray_umath.cpython-313-darwin.so' (mach-o file, but is an incompatible architecture (have 'arm64', need 'x86_64')), '/System/Volumes/Preboot/Cryptexes/OS/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/numpy/_core/_multiarray_umath.cpython-313-darwin.so' (no such file), '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/numpy/_core/_multiarray_umath.cpython-313-darwin.so' (mach-o file, but is an incompatible architecture (have 'arm64', need 'x86_64'))
+

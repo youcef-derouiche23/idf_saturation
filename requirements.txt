@@ -1,0 +1,25 @@
+# Dependances Python - API REST + Dashboard + Data Loader
+# Installation : pip install -r requirements.txt
+#
+# Remarque : feeder.py / processor.py / datamart.py tournent dans le
+# container spark-master (PySpark deja installe), ils n'ont pas besoin
+# de ce fichier.
+
+# --- Data Loading (CSV to PostgreSQL) ---
+pandas==2.2.3
+psycopg2-binary==2.9.10
+
+# --- API REST (FastAPI + JWT) ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+PyJWT==2.10.1
+python-multipart==0.0.20
+pydantic==2.10.4
+
+# --- Dashboard (Streamlit + Plotly) ---
+streamlit==1.41.1
+plotly==5.24.1
+requests==2.32.3
+
+# --- Utils ---
+python-dotenv==1.0.0
