@@ -479,7 +479,11 @@ elif datamart_choice == "saturation-ml":
     df = fetch_datamart("saturation-ml")
     
     if not df.empty:
-        sat_count = (df["est_saturation"] == 1).sum()
+        # Recalculer est_saturation basé sur le seuil IDFM de 7.0%
+        SATURATION_THRESHOLD_ML = 7.0
+        df["est_saturation_nouveau"] = (df["pourcentage_validations"] > SATURATION_THRESHOLD_ML).astype(int)
+        
+        sat_count = (df["est_saturation_nouveau"] == 1).sum()
         total = len(df)
         sat_pct = sat_count / total * 100 if total > 0 else 0
         
@@ -508,7 +512,7 @@ elif datamart_choice == "saturation-ml":
             
             # Saturation par ligne
             st.markdown("##### Saturation par Ligne")
-            line_sat = df[df["est_saturation"] == 1].groupby("ligne").size().reset_index(name="Saturations")
+            line_sat = df[df["est_saturation_nouveau"] == 1].groupby("ligne").size().reset_index(name="Saturations")
             line_sat["Ligne"] = line_sat["ligne"].apply(map_ligne_code_to_name)
             line_sat = line_sat[["Ligne", "Saturations"]].sort_values("Saturations", ascending=True)
             
@@ -525,29 +529,31 @@ elif datamart_choice == "saturation-ml":
         
         with tab2:
             st.markdown("##### Pics de Saturation")
-            saturated_df = df[df["est_saturation"] == 1].copy()
+            saturated_df = df[df["est_saturation_nouveau"] == 1].copy()
             
             if len(saturated_df) > 0:
                 saturated_df["Ligne"] = saturated_df["ligne"].apply(map_ligne_code_to_name)
                 saturated_df["Jour"] = saturated_df["jour_type"].apply(map_jour_type)
-                display_sat = saturated_df[["Ligne", "heure", "Jour", "nb_validations", "taux_ponctualite"]].head(100)
-                display_sat.columns = ["Ligne", "Heure", "Jour Type", "Validations", "Ponctualité (%)"]
+                display_sat = saturated_df[["Ligne", "heure", "Jour", "pourcentage_validations", "taux_ponctualite"]].head(100)
+                display_sat.columns = ["Ligne", "Heure", "Jour Type", "% Trafic", "Ponctualité (%)"]
                 display_sat["Ponctualité (%)"] = display_sat["Ponctualité (%)"].round(1)
-                display_sat = display_sat.sort_values("Validations", ascending=False)
+                display_sat["% Trafic"] = display_sat["% Trafic"].round(2)
+                display_sat = display_sat.sort_values("% Trafic", ascending=False)
                 st.dataframe(display_sat, use_container_width=True, height=400, hide_index=True)
-                st.caption(f"Affichage : {min(100, len(saturated_df))} pics de saturation")
+                st.caption(f"Affichage : {min(100, len(saturated_df))} pics de saturation (> 7% du trafic)")
             else:
                 st.info("✅ Aucune saturation détectée")
         
         with tab3:
             st.markdown("##### Toutes les Données ML (100 premières)")
-            display_df = df[["ligne", "heure", "jour_type", "nb_validations", "taux_ponctualite", "est_saturation"]].head(100).copy()
+            display_df = df[["ligne", "heure", "jour_type", "pourcentage_validations", "taux_ponctualite", "est_saturation_nouveau"]].head(100).copy()
             display_df["Ligne"] = display_df["ligne"].apply(map_ligne_code_to_name)
             display_df["Jour"] = display_df["jour_type"].apply(map_jour_type)
-            display_df["Saturé"] = display_df["est_saturation"].map({0: "🟢 Non", 1: "🔴 Oui"})
-            display_df = display_df[["Ligne", "heure", "Jour", "nb_validations", "taux_ponctualite", "Saturé"]]
-            display_df.columns = ["Ligne", "Heure", "Jour Type", "Validations", "Ponctualité (%)", "Saturé"]
+            display_df["Saturé"] = display_df["est_saturation_nouveau"].map({0: "🟢 Non", 1: "🔴 Oui"})
+            display_df = display_df[["Ligne", "heure", "Jour", "pourcentage_validations", "taux_ponctualite", "Saturé"]]
+            display_df.columns = ["Ligne", "Heure", "Jour Type", "% Trafic", "Ponctualité (%)", "Saturé"]
             display_df["Ponctualité (%)"] = display_df["Ponctualité (%)"].round(1)
+            display_df["% Trafic"] = display_df["% Trafic"].round(2)
             st.dataframe(display_df, use_container_width=True, height=400, hide_index=True)
 
 st.markdown("---")
