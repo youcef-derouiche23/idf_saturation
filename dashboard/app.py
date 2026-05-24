@@ -36,17 +36,24 @@ st.title("🚇 Tableau de Bord IDFM - Réseau Ferré")
 st.markdown("**Où et quand le réseau souffre-t-il le plus ?**")
 
 # =====================================================
-# MAPPING DES LIGNES
+# MAPPING DES LIGNES ET JOURS
 # =====================================================
 
-# Mapping des codes STIF aux noms de lignes IDFM
+# CORRECTION : Mapping complet des codes STIF aux noms de lignes IDFM
 STIF_TO_LIGNE = {
-    100: "A - RER A",
-    760: "B - RER B",
-    761: "C - RER C",
-    762: "D - RER D",
-    800: "E - RER E",
-    810: "H - Transilien H",
+    100: "RER A",
+    760: "RER B",
+    761: "RER C",
+    762: "RER D",
+    800: "RER E",
+    810: "Transilien H",
+    820: "Transilien J",
+    830: "Transilien K",
+    840: "Transilien L",
+    850: "Transilien N",
+    860: "Transilien P",
+    870: "Transilien R",
+    880: "Transilien U",
 }
 
 # Mapping des codes de jour-type
@@ -59,7 +66,7 @@ JOUR_TYPE_MAPPING = {
 }
 
 def map_ligne_code_to_name(code):
-    """Convertir un code de ligne en nom (ex: 100 -> 'A - RER A')"""
+    """Convertir un code de ligne en nom (ex: 100 -> 'RER A')"""
     code = int(code) if not isinstance(code, int) else code
     return STIF_TO_LIGNE.get(code, str(code))
 
@@ -196,7 +203,7 @@ with st.expander("📖 Guide rapide"):
     Analyse des données de fréquentation et régularité du réseau IDFM (Métro + RER).
     
     ### Seuils clés
-    - 🔴 **Saturation** : > 5 000 validations/heure
+    - 🔴 **Saturation** : > 7% du trafic quotidien
     - 🟠 **Ponctualité critique** : < 80%
     - 🟢 **Objectif IDFM** : > 95% de ponctualité
     """)
@@ -218,7 +225,8 @@ if datamart_choice == "frequentation-stations":
     df = fetch_datamart("frequentation-stations")
     
     if not df.empty:
-        SATURATION_THRESHOLD = 5000
+        # Seuil de saturation : 7.0% du trafic quotidien (spécification IDFM)
+        SATURATION_THRESHOLD = 7.0
         
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -229,10 +237,10 @@ if datamart_choice == "frequentation-stations":
             st.metric("⏰ Créneaux", df["heure"].nunique())
         
         st.markdown(f"""
-        **Seuil de saturation** : {SATURATION_THRESHOLD:,} validations/heure
-        - 🟢 < 1 000 = Faible
-        - 🟠 1 000-5 000 = Normal
-        - 🔴 > 5 000 = Saturé
+        **Seuil de saturation** : {SATURATION_THRESHOLD}% du trafic quotidien
+        - 🟢 < 3% = Faible
+        - 🟠 3-7% = Normal
+        - 🔴 > 7% = Saturé
         """)
         
         # Onglets pour les différentes vues
@@ -240,78 +248,78 @@ if datamart_choice == "frequentation-stations":
         
         with tab1:
             st.markdown("#### Top 10 Lignes par Fréquentation Moyenne")
-            top_lines = df.groupby("ligne")["nb_validations"].mean().nlargest(10).reset_index()
-            top_lines = top_lines.sort_values("nb_validations")
+            top_lines = df.groupby("ligne")["pourcentage_validations"].mean().nlargest(10).reset_index()
+            top_lines = top_lines.sort_values("pourcentage_validations")
             top_lines["ligne_nom"] = top_lines["ligne"].apply(map_ligne_code_to_name)
             
             fig = px.bar(
                 top_lines,
                 y="ligne_nom",
-                x="nb_validations",
+                x="pourcentage_validations",
                 title="Fréquentation Moyenne par Ligne",
                 orientation="h",
-                color="nb_validations",
+                color="pourcentage_validations",
                 color_continuous_scale="Reds"
             )
-            fig.update_layout(yaxis_title="Ligne", xaxis_title="Validations Moyennes")
-            fig.add_vline(x=SATURATION_THRESHOLD, line_dash="dash", line_color="darkred", annotation_text="Seuil saturation")
+            fig.update_layout(yaxis_title="Ligne", xaxis_title="% du Trafic Quotidien")
+            fig.add_vline(x=SATURATION_THRESHOLD, line_dash="dash", line_color="darkred", annotation_text=f"Seuil: {SATURATION_THRESHOLD}%")
             st.plotly_chart(fig, use_container_width=True)
             
             # Tableau par ligne et jour
             st.markdown("##### Détail par Ligne et Jour Type")
             line_detail = df.groupby(["ligne", "jour_type"]).agg({
-                "nb_validations": ["mean", "max"],
+                "pourcentage_validations": ["mean", "max"],
                 "id_station": "nunique"
             }).reset_index()
-            line_detail.columns = ["Ligne", "Jour", "Validations Moyennes", "Validations Max", "Stations"]
+            line_detail.columns = ["Ligne", "Jour", "% Moyen", "% Max", "Stations"]
             line_detail["Ligne"] = line_detail["Ligne"].apply(map_ligne_code_to_name)
             line_detail["Jour"] = line_detail["Jour"].apply(map_jour_type)
-            line_detail = line_detail.sort_values("Validations Moyennes", ascending=False)
+            line_detail = line_detail.sort_values("% Moyen", ascending=False)
             st.dataframe(line_detail.head(30), use_container_width=True, hide_index=True)
         
         with tab2:
             st.markdown("#### Top 10 Stations par Fréquentation Moyenne")
-            top_stations = df.groupby("id_station")["nb_validations"].mean().nlargest(10).reset_index()
-            top_stations = top_stations.sort_values("nb_validations")
-            top_stations.columns = ["Station ID", "Fréquentation Moyenne"]
+            top_stations = df.groupby("id_station")["pourcentage_validations"].mean().nlargest(10).reset_index()
+            top_stations = top_stations.sort_values("pourcentage_validations")
+            top_stations.columns = ["Station ID", "% Trafic"]
             
             fig = px.bar(
                 top_stations,
                 y="Station ID",
-                x="Fréquentation Moyenne",
+                x="% Trafic",
                 title="Top 10 Stations par Fréquentation",
                 orientation="h",
-                color="Fréquentation Moyenne",
+                color="% Trafic",
                 color_continuous_scale="Oranges"
             )
-            fig.update_layout(yaxis_title="Station", xaxis_title="Validations Moyennes")
-            fig.add_vline(x=SATURATION_THRESHOLD, line_dash="dash", line_color="darkred", annotation_text="Seuil saturation")
+            fig.update_layout(yaxis_title="Station", xaxis_title="% du Trafic Quotidien")
+            fig.add_vline(x=SATURATION_THRESHOLD, line_dash="dash", line_color="darkred", annotation_text=f"Seuil: {SATURATION_THRESHOLD}%")
             st.plotly_chart(fig, use_container_width=True)
             
             # Tableau stations saturées
             st.markdown("##### Stations les Plus Saturées")
-            saturated = df[df["nb_validations"] > SATURATION_THRESHOLD].copy()
+            saturated = df[df["pourcentage_validations"] > SATURATION_THRESHOLD].copy()
             if len(saturated) > 0:
                 sat_summary = saturated.groupby("id_station").agg({
-                    "nb_validations": ["mean", "max", "count"],
+                    "pourcentage_validations": ["mean", "max", "count"],
                     "ligne": "first",
                     "jour_type": "first"
                 }).reset_index()
-                sat_summary.columns = ["Station ID", "Validations Moyennes", "Validations Max", "Occurrences", "Ligne", "Jour"]
+                sat_summary.columns = ["Station ID", "% Moyen", "% Max", "Occurrences", "Ligne", "Jour"]
                 sat_summary["Ligne"] = sat_summary["Ligne"].apply(map_ligne_code_to_name)
                 sat_summary["Jour"] = sat_summary["Jour"].apply(map_jour_type)
-                sat_summary = sat_summary.sort_values("Validations Max", ascending=False)
+                sat_summary = sat_summary.sort_values("% Max", ascending=False)
                 st.dataframe(sat_summary, use_container_width=True, hide_index=True)
             else:
                 st.info("✅ Aucune saturation détectée")
         
         with tab3:
             st.markdown("##### Données Détaillées (50 premières lignes)")
-            display_df = df[["id_station", "ligne", "heure", "jour_type", "nb_validations"]].head(50).copy()
+            display_df = df[["id_station", "ligne", "heure", "jour_type", "pourcentage_validations"]].head(50).copy()
             display_df["ligne_nom"] = display_df["ligne"].apply(map_ligne_code_to_name)
             display_df["jour_nom"] = display_df["jour_type"].apply(map_jour_type)
-            display_df = display_df[["id_station", "ligne_nom", "heure", "jour_nom", "nb_validations"]]
-            display_df.columns = ["Station", "Ligne", "Heure", "Jour Type", "Validations"]
+            display_df = display_df[["id_station", "ligne_nom", "heure", "jour_nom", "pourcentage_validations"]]
+            display_df.columns = ["Station", "Ligne", "Heure", "Jour Type", "% Trafic"]
             st.dataframe(display_df, use_container_width=True, height=400)
 
 # =====================================================
@@ -432,7 +440,7 @@ elif datamart_choice == "evolution-temporelle":
             st.metric("📊 Fréquentation Totale", f"{total_freq:,.0f}")
         with col2:
             nb_jours = df_by_jour.shape[0]
-            st.metric("� Jours Type", f"{nb_jours}")
+            st.metric("📅 Jours Type", f"{nb_jours}")
         with col3:
             avg_variation = df_by_jour["variation_semaine_precedente"].mean()
             st.metric("📈 Variation Moyenne", f"{avg_variation:+.1f}%")

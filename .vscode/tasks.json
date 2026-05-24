@@ -1,0 +1,11 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Streamlit Dashboard",
+			"type": "shell",
+			"command": "cd /Users/youcef/Downloads/Projet_IDFM_Frequentation && streamlit run dashboard/app.py --logger.level=debug",
+			"isBackground": true
+		}
+	]
+}
