@@ -1,29 +1,14 @@
-# -*- coding: utf-8 -*-
-"""
-models.py - Schémas Pydantic pour les réponses API
-"""
-
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 
 
-# =====================================================
-# AUTHENTIFICATION
-# =====================================================
-
 class Token(BaseModel):
-    """Réponse pour l'obtention d'un token JWT"""
     access_token: str
     token_type: str = "bearer"
 
 
-# =====================================================
-# PAGINATION
-# =====================================================
-
 class PaginatedResponse(BaseModel):
-    """Response générique paginée pour tous les datamarts"""
     data: List[dict]
     total: int
     page: int
@@ -31,12 +16,7 @@ class PaginatedResponse(BaseModel):
     total_pages: int
 
 
-# =====================================================
-# DATAMARTS
-# =====================================================
-
 class FrequentationStationResponse(BaseModel):
-    """Réponse pour le datamart de fréquentation par station"""
     ligne: str
     id_station: int
     nom_station: str
@@ -50,7 +30,6 @@ class FrequentationStationResponse(BaseModel):
 
 
 class RegulariteResponse(BaseModel):
-    """Réponse pour le datamart de régularité"""
     date: str
     ligne: str
     taux_ponctualite_avg: float
@@ -60,7 +39,6 @@ class RegulariteResponse(BaseModel):
 
 
 class EvolutionResponse(BaseModel):
-    """Réponse pour le datamart d'évolution temporelle"""
     date: str
     jour_semaine: int
     jour_nom: str
@@ -73,7 +51,6 @@ class EvolutionResponse(BaseModel):
 
 
 class SaturationMLResponse(BaseModel):
-    """Réponse pour le datamart ML (prédiction saturation)"""
     date: str
     heure: int
     ligne: str

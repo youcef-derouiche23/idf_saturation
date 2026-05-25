@@ -1,22 +1,12 @@
-# -*- coding: utf-8 -*-
-"""
-processor.py - Transformation couche Silver (nettoyage, jointures, agrégations, window functions)
-
-Transformations :
-  1. Jointures : validations ↔ stations (id_station) ↔ régularité (date + ligne)
-  2. Agrégations : SUM validations, AVG taux ponctualité, COUNT stations saturées
-  3. Window Functions : RANK(), LAG(), ROW_NUMBER() sur fréquentation/régularité
-
-Lancement (depuis le container spark-master) :
-    spark-submit --master local[*] processor.py --config config/config.ini
-"""
-
+import sys
+import typing
+sys.modules['typing.io'] = typing
 import argparse
-from asyncio.log import logger
 import configparser
 import logging
 import os
-import sys
+os.environ["HADOOP_HOME"] = "C:\\hadoop"
+os.environ["PATH"] = "C:\\hadoop\\bin;" + os.environ.get("PATH", "")
 from datetime import datetime
 
 from pyspark.sql import SparkSession
@@ -68,42 +58,29 @@ def parse_args():
 # =====================================================
 
 def load_raw_data(spark, logger, config):
-    """Charge les 3 sources depuis HDFS/Parquet"""
-    logger.info("=" * 60)
-    logger.info("CHARGEMENT DONNÉES RAW")
-    logger.info("=" * 60)
-    
+    logger.info("CHARGEMENT DONNEES RAW")
 
     try:
         df_validations = spark.read.parquet(config["hdfs"]["raw_validations_path"])
         df_stations = spark.read.parquet(config["hdfs"]["raw_stations_path"])
         df_regularite = spark.read.parquet(config["hdfs"]["raw_regularite_path"])
-        
-        logger.info("Application des 5 règles de validation des données...")
 
-        # Règle 1 : Validations positives uniquement
+        logger.info("Application des regles de validation des donnees...")
+
         df_validations = df_validations.filter(F.col("pct_validations").isNotNull() & (F.col("pct_validations") >= 0))
-        
-        # Règle 2 : Ligne de transport valide
         df_validations = df_validations.filter(F.col("ligne").isNotNull())
-        
-        # Règle 3 : Exclure les stations fantômes du référentiel
         df_stations = df_stations.filter(F.col("id_station").isNotNull() & F.col("localisation").isNotNull())
-        
-        # Règle 4 : Le taux de ponctualité doit être entre 0 et 100
         df_regularite = df_regularite.filter((F.col("taux_ponctualite") >= 0) & (F.col("taux_ponctualite") <= 100))
-        
-        # Règle 5 : Exclure les régularités sans date
         df_regularite = df_regularite.filter(F.col("date").isNotNull())
 
         logger.info(f"Validations : {df_validations.count()} lignes")
         logger.info(f"Stations : {df_stations.count()} lignes")
-        logger.info(f"Régularité : {df_regularite.count()} lignes")
+        logger.info(f"Regularite : {df_regularite.count()} lignes")
 
         return df_validations, df_stations, df_regularite
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors du chargement : {e}")
+        logger.error(f"Erreur lors du chargement : {e}")
         raise
 
 
@@ -112,39 +89,30 @@ def load_raw_data(spark, logger, config):
 # =====================================================
 
 def join_data(spark, logger, df_validations, df_stations, df_regularite):
-    """
-    Effectue les jointures :
-      validations ↔ stations (id_station)
-      result ↔ régularité (date + ligne)
-    """
-    logger.info("=" * 60)
-    logger.info("JOINTURES")
-    logger.info("=" * 60)
     df_stations = df_stations.withColumnRenamed("nom_station", "nom_station_ref")
+    df_stations = df_stations.drop("year", "month", "day")
 
     try:
-        # Jointure 1 : validations + stations
         df_joined = df_validations.join(
             df_stations,
             on="id_station",
             how="left"
         )
 
-        logger.info(f"Après jointure avec stations : {df_joined.count()} lignes")
+        logger.info(f"Apres jointure avec stations : {df_joined.count()} lignes")
 
-        # Jointure 2 : result + régularité (sur date + ligne)
         df_joined = df_joined.join(
             df_regularite,
-            on=["date", "ligne"],
+            on=["ligne", "year", "month", "day"],
             how="left"
         )
 
-        logger.info(f"Après jointure avec régularité : {df_joined.count()} lignes")
+        logger.info(f"Apres jointure avec regularite : {df_joined.count()} lignes")
 
         return df_joined
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors des jointures : {e}")
+        logger.error(f"Erreur lors des jointures : {e}")
         raise
 
 
@@ -153,26 +121,10 @@ def join_data(spark, logger, df_validations, df_stations, df_regularite):
 # =====================================================
 
 def aggregate_and_enrich(spark, logger, df_joined, config):
-    """
-    Agrégations et enrichissement :
-      - Détection jour de semaine
-      - Détection période de vacances
-      - Agrégation par station/ligne/heure
-      - Ranking des stations saturées
-    """
-    logger.info("=" * 60)
-    logger.info("AGRÉGATIONS ET ENRICHISSEMENT")
-    logger.info("=" * 60)
-
     try:
-        # Conversion date en timestamp
         df_joined = df_joined.withColumn("date", F.to_date(F.col("date")))
-
-        # Jour de la semaine (1=lundi, 7=dimanche)
         df_joined = df_joined.withColumn("jour_semaine", F.dayofweek(F.col("date")))
 
-        # Noms des jours
-        jour_names = {1: "Dimanche", 2: "Lundi", 3: "Mardi", 4: "Mercredi", 5: "Jeudi", 6: "Vendredi", 7: "Samedi"}
         df_joined = df_joined.withColumn(
             "jour_nom",
             F.when(F.col("jour_semaine") == 1, "Dimanche")
@@ -184,8 +136,6 @@ def aggregate_and_enrich(spark, logger, df_joined, config):
              .when(F.col("jour_semaine") == 7, "Samedi")
         )
 
-        # Détection période de vacances scolaires (simplifié)
-        # Vacances d'été : juillet-août, Noël : décembre 20-31, février, avril
         df_joined = df_joined.withColumn(
             "est_vacances",
             F.when(
@@ -196,11 +146,11 @@ def aggregate_and_enrich(spark, logger, df_joined, config):
             ).otherwise(0)
         )
 
-        logger.info("✓ Enrichissement complété")
+        logger.info("Enrichissement complete")
         return df_joined
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors de l'enrichissement : {e}")
+        logger.error(f"Erreur lors de l'enrichissement : {e}")
         raise
 
 
@@ -209,89 +159,65 @@ def aggregate_and_enrich(spark, logger, df_joined, config):
 # =====================================================
 
 def apply_window_functions(spark, logger, df_enriched):
-    """
-    Applique les window functions :
-      - RANK() : stations les plus fréquentées par ligne
-      - LAG() : évolution semaine après semaine
-      - ROW_NUMBER() : classement par créneau
-    """
-    logger.info("=" * 60)
-    logger.info("WINDOW FUNCTIONS")
-    logger.info("=" * 60)
-
     try:
-        # Window 1 : Ranking des stations par ligne et heure
-        w_rank = Window.partitionBy("ligne", "heure").orderBy(F.desc("nb_validations"))
+        w_rank = Window.partitionBy("ligne", "heure").orderBy(F.desc("pct_validations"))
         df_enriched = df_enriched.withColumn(
             "rank_station_par_ligne",
             F.rank().over(w_rank)
         )
 
-        # Window 2 : Évolution par rapport à la semaine précédente (LAG)
         w_lag = Window.partitionBy("id_station", "heure").orderBy(F.col("date"))
         df_enriched = df_enriched.withColumn(
-            "nb_validations_semaine_precedente",
-            F.lag(F.col("nb_validations"), 7).over(w_lag)
+            "pct_validations_semaine_precedente",
+            F.lag(F.col("pct_validations"), 7).over(w_lag)
         )
 
-        # Calcul du pourcentage d'évolution
         df_enriched = df_enriched.withColumn(
             "evolution_pct",
             F.when(
-                F.col("nb_validations_semaine_precedente") != 0,
-                ((F.col("nb_validations") - F.col("nb_validations_semaine_precedente")) /
-                 F.col("nb_validations_semaine_precedente") * 100)
+                F.col("pct_validations_semaine_precedente") != 0,
+                ((F.col("pct_validations") - F.col("pct_validations_semaine_precedente")) /
+                 F.col("pct_validations_semaine_precedente") * 100)
             ).otherwise(0)
         )
 
-        # Window 3 : ROW_NUMBER pour classement temporel
         w_row = Window.partitionBy("ligne", "id_station").orderBy(F.col("date"), F.col("heure"))
         df_enriched = df_enriched.withColumn(
             "row_num_temps",
             F.row_number().over(w_row)
         )
 
-        logger.info("✓ Window functions appliquées")
+        logger.info("Window functions appliquees")
         return df_enriched
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors de l'application des window functions : {e}")
+        logger.error(f"Erreur lors de l'application des window functions : {e}")
         raise
-
 
 # =====================================================
 # CREATION DES TABLES HIVE SILVER
 # =====================================================
 
 def create_hive_tables(spark, logger, df_enriched, config):
-    """Crée/met à jour les tables Hive dans la couche Silver"""
-    logger.info("=" * 60)
-    logger.info("CRÉATION TABLES HIVE SILVER")
-    logger.info("=" * 60)
-    
-
     try:
         db = config["hive"]["database"]
         table = config["hive"]["table_validations"]
 
-        logger.info(f"Création table : {db}.{table}")
+        logger.info(f"Creation table : {db}.{table}")
 
-        # Créer database si nécessaire
         spark.sql(f"CREATE DATABASE IF NOT EXISTS {db}")
 
-        # Écrire la table Hive (mode overwrite)
         df_enriched.write.mode("overwrite") \
             .partitionBy("year", "month", "day") \
             .option("path", f"{config['hdfs']['silver_path']}/{table}") \
             .saveAsTable(f"{db}.{table}")
 
-        # Vérifier la création
         spark.sql(f"DESCRIBE TABLE {db}.{table}").show(truncate=False)
 
-        logger.info("✓ Table Hive créée avec succès")
+        logger.info("Table Hive cree avec succes")
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors de la création des tables Hive : {e}")
+        logger.error(f"Erreur lors de la creation des tables Hive : {e}")
         raise
 
 
@@ -307,7 +233,7 @@ def main():
     logger = setup_logger(config["local"]["log_dir"])
 
     try:
-        logger.info("🚀 DÉMARRAGE PROCESSOR")
+        logger.info("DEMARRAGE PROCESSOR")
         logger.info(f"Timestamp : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
         spark = SparkSession.builder \
@@ -317,7 +243,7 @@ def main():
             .enableHiveSupport() \
             .getOrCreate()
 
-        logger.info("✓ SparkSession créée")
+        logger.info("SparkSession creee")
 
         # Pipeline complet
         df_val, df_sta, df_reg = load_raw_data(spark, logger, config)
@@ -325,16 +251,16 @@ def main():
         df_enriched = aggregate_and_enrich(spark, logger, df_joined, config)
         df_enriched = df_enriched.cache()
         count_lignes = df_enriched.count() # Force l'évaluation et le stockage en cache
-        logger.info(f"Données mises en cache. Nombre de lignes prêtes pour les Window Functions : {count_lignes}")
+        logger.info(f"Donnees mises en cache. Nombre de lignes pretent pour les Window Functions : {count_lignes}")
         df_enriched = apply_window_functions(spark, logger, df_enriched)
         create_hive_tables(spark, logger, df_enriched, config)
 
         spark.stop()
-        logger.info("✓ SparkSession fermée")
-        logger.info("🏁 PROCESSOR TERMINÉ AVEC SUCCÈS")
+        logger.info("SparkSession fermee")
+        logger.info("PROCESSOR TERMINE AVEC SUCCES")
 
     except Exception as e:
-        logger.error(f"🔥 ERREUR FATALE : {e}")
+        logger.error(f"ERREUR FATALE : {e}")
         sys.exit(1)
 
 

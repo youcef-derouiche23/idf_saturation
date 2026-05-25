@@ -1,32 +1,18 @@
-# -*- coding: utf-8 -*-
-"""
-datamart.py - Création des 4 datamarts PostgreSQL (couche Gold)
-
-Datamarts :
-  1. dm_frequentation_par_station_ligne : Fréquentation par station/ligne/heure
-  2. dm_regularite_par_ligne : Régularité inter-lignes
-  3. dm_evolution_frequentation : Tendances temporelles
-  4. dm_saturation_ml : Features pour modèle ML prédictif
-
-Lancement (depuis le container spark-master) :
-    spark-submit --master local[*] datamart.py --config config/config.ini
-"""
-
+import sys
+import typing
+sys.modules['typing.io'] = typing
 import argparse
 import configparser
 import logging
 import os
-import sys
+os.environ["HADOOP_HOME"] = "C:\\hadoop"
+os.environ["PATH"] = "C:\\hadoop\\bin;" + os.environ.get("PATH", "")
 from datetime import datetime
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
-
-# =====================================================
-# LOGGING
-# =====================================================
 
 def setup_logger(log_dir):
     os.makedirs(log_dir, exist_ok=True)
@@ -67,23 +53,30 @@ def parse_args():
 # =====================================================
 
 def load_silver_data(spark, logger, config):
-    """Charge la table silver enrichie depuis Hive"""
-    logger.info("=" * 60)
-    logger.info("CHARGEMENT TABLE SILVER")
-    logger.info("=" * 60)
-
     try:
-        db = config["hive"]["database"]
-        table = config["hive"]["table_validations"]
-        df = spark.sql(f"SELECT * FROM {db}.{table}")
+        df_validations = spark.read.parquet("data/raw/validations")
+        df_stations = spark.read.parquet("data/raw/stations")
+        df_regularite = spark.read.parquet("data/raw/regularite")
 
-        logger.info(f"Table chargée : {df.count()} lignes")
-        logger.info(f"Colonnes : {df.columns}")
+        df_stations = df_stations.withColumnRenamed("nom_station", "nom_station_ref").drop("year", "month", "day")
+        df_joined = df_validations.join(df_stations, on="id_station", how="left")
+        df_joined = df_joined.join(df_regularite, on=["ligne", "year", "month", "day"], how="left")
 
+        from pyspark.sql.window import Window
+        w_rank = Window.partitionBy("ligne", "heure").orderBy(F.desc("pct_validations"))
+        df = df_joined.withColumn("rank_station_par_ligne", F.rank().over(w_rank))
+
+        df = df.withColumn("evolution_pct", F.lit(0))
+        df = df.withColumn("est_vacances", F.lit(0))
+        df = df.withColumn("jour_semaine", F.lit(1))
+        df = df.withColumn("jour_nom", F.lit("Lundi"))
+
+        logger.info(f"Table reconstruite : {df.count()} lignes")
+        
         return df
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors du chargement : {e}")
+        logger.error(f"Erreur lors du chargement : {e}")
         raise
 
 
@@ -92,14 +85,6 @@ def load_silver_data(spark, logger, config):
 # =====================================================
 
 def create_dm_frequentation(spark, logger, df, config):
-    """
-    DM1 : Fréquentation par station, ligne, heure, jour
-    Colonnes : ligne, id_station, nom_station, heure, jour_semaine, nb_validations, rank_station_par_ligne
-    """
-    logger.info("=" * 60)
-    logger.info("DATAMART 1 : FRÉQUENTATION PAR STATION/LIGNE")
-    logger.info("=" * 60)
-
     try:
         dm1 = df.select(
             F.col("ligne"),
@@ -108,7 +93,7 @@ def create_dm_frequentation(spark, logger, df, config):
             F.col("heure"),
             F.col("jour_semaine"),
             F.col("jour_nom"),
-            F.col("nb_validations"),
+            F.col("pct_validations"),
             F.col("rank_station_par_ligne"),
             F.col("date"),
             F.current_timestamp().alias("load_timestamp")
@@ -116,18 +101,18 @@ def create_dm_frequentation(spark, logger, df, config):
 
         dm1 = dm1.groupBy("ligne", "id_station", "nom_station", "heure", "jour_semaine", "jour_nom") \
             .agg(
-                F.avg("nb_validations").alias("nb_validations_avg"),
-                F.max("nb_validations").alias("nb_validations_max"),
-                F.min("nb_validations").alias("nb_validations_min"),
+                F.avg("pct_validations").alias("pct_validations_avg"),
+                F.max("pct_validations").alias("pct_validations_max"),
+                F.min("pct_validations").alias("pct_validations_min"),
                 F.count("*").alias("nb_observations")
             ) \
-            .orderBy(F.desc("nb_validations_avg"))
+            .orderBy(F.desc("pct_validations_avg"))
 
         logger.info(f"DM1 : {dm1.count()} lignes")
         return dm1
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors de la création du DM1 : {e}")
+        logger.error(f"Erreur lors de la creation du DM1 : {e}")
         raise
 
 
@@ -136,32 +121,20 @@ def create_dm_frequentation(spark, logger, df, config):
 # =====================================================
 
 def create_dm_regularite(spark, logger, df, config):
-    """
-    DM2 : Régularité des lignes
-    Colonnes : date, ligne, taux_ponctualite, nb_retards, delai_moyen, rang_regularite
-    """
-    logger.info("=" * 60)
-    logger.info("DATAMART 2 : RÉGULARITÉ PAR LIGNE")
-    logger.info("=" * 60)
-
     try:
         dm2 = df.select(
             F.col("date"),
             F.col("ligne"),
             F.col("taux_ponctualite"),
-            F.col("nb_retards"),
-            F.col("delai_moyen_minutes")
+            F.col("ratio_voyageurs_retard")
         ).where(F.col("taux_ponctualite").isNotNull())
 
-        # Agrégation par ligne et date
         dm2 = dm2.groupBy("date", "ligne") \
             .agg(
                 F.avg("taux_ponctualite").alias("taux_ponctualite_avg"),
-                F.sum("nb_retards").alias("nb_retards_total"),
-                F.avg("delai_moyen_minutes").alias("delai_moyen")
+                F.avg("ratio_voyageurs_retard").alias("ratio_voyageurs_retard_avg")
             )
 
-        # Ranking par taux de ponctualité
         w_rank = Window.partitionBy("date").orderBy(F.asc("taux_ponctualite_avg"))
         dm2 = dm2.withColumn("rang_regularite", F.rank().over(w_rank))
 
@@ -171,7 +144,7 @@ def create_dm_regularite(spark, logger, df, config):
         return dm2
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors de la création du DM2 : {e}")
+        logger.error(f"Erreur lors de la creation du DM2 : {e}")
         raise
 
 
@@ -180,14 +153,6 @@ def create_dm_regularite(spark, logger, df, config):
 # =====================================================
 
 def create_dm_evolution(spark, logger, df, config):
-    """
-    DM3 : Évolution temporelle fréquentation
-    Colonnes : date, jour_semaine, periode_vacances, ligne, id_station, nb_validations_cumul, evolution_vs_semaine_precedente
-    """
-    logger.info("=" * 60)
-    logger.info("DATAMART 3 : ÉVOLUTION TEMPORELLE")
-    logger.info("=" * 60)
-
     try:
         dm3 = df.select(
             F.col("date"),
@@ -197,14 +162,13 @@ def create_dm_evolution(spark, logger, df, config):
             F.col("ligne"),
             F.col("id_station"),
             F.col("nom_station"),
-            F.col("nb_validations"),
+            F.col("pct_validations"),
             F.col("evolution_pct")
         )
 
-        # Agrégation par date, station, ligne
         dm3 = dm3.groupBy("date", "jour_semaine", "jour_nom", "est_vacances", "ligne", "id_station", "nom_station") \
             .agg(
-                F.sum("nb_validations").alias("nb_validations_cumul"),
+                F.sum("pct_validations").alias("pct_validations_cumul"),
                 F.avg("evolution_pct").alias("evolution_vs_semaine_precedente_pct")
             )
 
@@ -215,7 +179,7 @@ def create_dm_evolution(spark, logger, df, config):
         return dm3
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors de la création du DM3 : {e}")
+        logger.error(f"Erreur lors de la creation du DM3 : {e}")
         raise
 
 
@@ -224,17 +188,8 @@ def create_dm_evolution(spark, logger, df, config):
 # =====================================================
 
 def create_dm_saturation_ml(spark, logger, df, config):
-    """
-    DM4 : Datamart pour ML - Prédiction de saturation
-    Colonnes : date, heure, ligne, id_station, nb_validations, taux_ponctualite,
-               jour_semaine, is_vacances, jour_ferie, est_saturation (label)
-    """
-    logger.info("=" * 60)
-    logger.info("DATAMART 4 : SATURATION ML")
-    logger.info("=" * 60)
-
     try:
-        saturation_threshold = int(config["thresholds"]["saturation_threshold"])
+        saturation_threshold = int(config["thresholds"]["saturation_threshold"]) 
 
         dm4 = df.select(
             F.col("date"),
@@ -242,7 +197,7 @@ def create_dm_saturation_ml(spark, logger, df, config):
             F.col("ligne"),
             F.col("id_station"),
             F.col("nom_station"),
-            F.col("nb_validations"),
+            F.col("pct_validations"),
             F.col("taux_ponctualite"),
             F.col("jour_semaine"),
             F.col("jour_nom"),
@@ -250,35 +205,32 @@ def create_dm_saturation_ml(spark, logger, df, config):
             F.col("rank_station_par_ligne")
         )
 
-        # Création du label : saturation = 1 si nb_validations > seuil, 0 sinon
         dm4 = dm4.withColumn(
             "est_saturation",
-            F.when(F.col("nb_validations") > saturation_threshold, 1).otherwise(0)
+            F.when(F.col("pct_validations") > saturation_threshold, 1).otherwise(0)
         )
 
-        # Détection jour férié (simplifié)
         dm4 = dm4.withColumn(
             "jour_ferie",
-            F.when(F.dayofyear(F.col("date")).isin(1, 365), 1).otherwise(0)  # À améliorer avec liste complète
+            F.when(F.dayofyear(F.col("date")).isin(1, 365), 1).otherwise(0)
         )
 
         dm4 = dm4.withColumn("load_timestamp", F.current_timestamp())
 
-        # Sélection des features pertinentes
         dm4 = dm4.select(
             "date", "heure", "ligne", "id_station", "nom_station",
-            "nb_validations", "taux_ponctualite", "jour_semaine", "jour_nom",
+            "pct_validations", "taux_ponctualite", "jour_semaine", "jour_nom",
             "is_vacances", "jour_ferie", "rank_station_par_ligne",
             "est_saturation", "load_timestamp"
         )
 
         logger.info(f"DM4 : {dm4.count()} lignes")
-        logger.info(f"Répartition saturation : {dm4.select('est_saturation').groupBy('est_saturation').count().collect()}")
+        logger.info(f"Repartition saturation : {dm4.select('est_saturation').groupBy('est_saturation').count().collect()}")
 
         return dm4
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors de la création du DM4 : {e}")
+        logger.error(f"Erreur lors de la creation du DM4 : {e}")
         raise
 
 
@@ -287,14 +239,13 @@ def create_dm_saturation_ml(spark, logger, df, config):
 # =====================================================
 
 def write_to_postgres(df, table_name, logger, config):
-    """Écrit un dataframe dans PostgreSQL"""
     try:
         jdbc_url = config["postgres"]["jdbc_url"]
         jdbc_driver = config["postgres"]["jdbc_driver_path"]
         db_user = config["postgres"]["user"]
         db_pass = config["postgres"]["password"]
 
-        logger.info(f"Écriture table PostgreSQL : {table_name}")
+        logger.info(f"Ecriture table PostgreSQL : {table_name}")
 
         df.write \
             .format("jdbc") \
@@ -306,10 +257,10 @@ def write_to_postgres(df, table_name, logger, config):
             .mode("overwrite") \
             .save()
 
-        logger.info(f"✓ {table_name} écrite avec succès")
+        logger.info(f"{table_name} ecrite avec succes")
 
     except Exception as e:
-        logger.error(f"✗ Erreur lors de l'écriture de {table_name} : {e}")
+        logger.error(f"Erreur lors de l'ecriture de {table_name} : {e}")
         raise
 
 
@@ -325,7 +276,7 @@ def main():
     logger = setup_logger(config["local"]["log_dir"])
 
     try:
-        logger.info("🚀 DÉMARRAGE DATAMART")
+        logger.info("DEMARRAGE DATAMART")
         logger.info(f"Timestamp : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
         spark = SparkSession.builder \
@@ -335,29 +286,26 @@ def main():
             .enableHiveSupport() \
             .getOrCreate()
 
-        logger.info("✓ SparkSession créée")
+        logger.info("SparkSession creee")
 
-        # Chargement données silver
         df_silver = load_silver_data(spark, logger, config)
 
-        # Création des 4 datamarts
         dm1 = create_dm_frequentation(spark, logger, df_silver, config)
         dm2 = create_dm_regularite(spark, logger, df_silver, config)
         dm3 = create_dm_evolution(spark, logger, df_silver, config)
         dm4 = create_dm_saturation_ml(spark, logger, df_silver, config)
 
-        # Écriture dans PostgreSQL
         write_to_postgres(dm1, "dm_frequentation_par_station_ligne", logger, config)
         write_to_postgres(dm2, "dm_regularite_par_ligne", logger, config)
         write_to_postgres(dm3, "dm_evolution_frequentation", logger, config)
         write_to_postgres(dm4, "dm_saturation_ml", logger, config)
 
         spark.stop()
-        logger.info("✓ SparkSession fermée")
-        logger.info("🏁 DATAMART TERMINÉ AVEC SUCCÈS")
+        logger.info("SparkSession fermee")
+        logger.info("DATAMART TERMINE AVEC SUCCES")
 
     except Exception as e:
-        logger.error(f"🔥 ERREUR FATALE : {e}")
+        logger.error(f"ERREUR FATALE : {e}")
         sys.exit(1)
 
 

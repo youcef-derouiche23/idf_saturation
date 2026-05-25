@@ -1,20 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-app.py - API REST FastAPI pour les datamarts IDFM
-
-Lancement (depuis la racine du projet) :
-    uvicorn api.app:app --reload
-
-Documentation interactive : http://localhost:8000/docs
-
-Endpoints :
-    GET  /                                          -> santé de l'API (public)
-    POST /auth/login                                -> retourne un token JWT
-    GET  /datamarts/frequentation-stations          (JWT) paginé
-    GET  /datamarts/regularite-lignes               (JWT) paginé
-    GET  /datamarts/evolution-temporelle            (JWT) paginé
-    GET  /datamarts/saturation-ml                   (JWT) paginé
-"""
+"""API REST FastAPI pour les datamarts IDFM"""
 
 import logging
 import math
@@ -45,17 +29,16 @@ DB_MODE = None
 db = None
 
 try:
-    logger.info(f"🔍 Tentative connexion PostgreSQL...")
+    logger.info(f"Tentative connexion PostgreSQL...")
     logger.info(f"   CONFIG_PATH = {CONFIG_PATH}")
     db = Database(CONFIG_PATH)
     logger.info(f"   Host: {db.host}, Port: {db.port}, DB: {db.dbname}, User: {db.user}")
     db.connect()
-    logger.info("✅ PostgreSQL disponible - mode production")
+    logger.info("PostgreSQL disponible - mode production")
     DB_MODE = "postgres"
 except Exception as e:
-    logger.warning(f"⚠️ PostgreSQL indisponible: {e}")
-    logger.info("📦 Initialisation du mode cache (chargement des CSV en arrière-plan)...")
-    # Ne pas charger les CSV ici - le faire au premier appel
+    logger.warning(f"PostgreSQL indisponible: {e}")
+    logger.info("Initialisation du mode cache (chargement des CSV en arriere-plan)...")
     db = None
     DB_MODE = "cache"
 
@@ -117,10 +100,10 @@ def health():
     ensure_db_initialized()
     return {
         "status": "ok",
-        "service": "IDFM Fréquentation & Régularité",
+        "service": "IDFM Frequentation & Regularite",
         "datamarts": list(DATAMARTS.keys()),
         "database_mode": DB_MODE,
-        "message": "🎉 API opérationnelle" if DB_MODE == "cache" else "✅ PostgreSQL connecté"
+        "message": "API operationnelle" if DB_MODE == "cache" else "PostgreSQL connecte"
     }
 
 

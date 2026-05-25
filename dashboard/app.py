@@ -1,19 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-app_simple.py - Dashboard Streamlit simplifié pour IDFM
-Version allégée pour éviter les problèmes de chargement infini
-"""
-
 import configparser
 import os
 import pandas as pd
 import plotly.express as px
 import requests
 import streamlit as st
-
-# =====================================================
-# CONFIGURATION
-# =====================================================
 
 CONFIG_PATH = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "config", "config.ini")
@@ -27,19 +17,13 @@ LOGIN_USER = _api.get("login_user", "admin")
 LOGIN_PASSWORD = _api.get("login_password", "admin")
 
 st.set_page_config(
-    page_title="IDFM - Analyse du Réseau Ferré",
-    page_icon="🚇",
+    page_title="IDFM - Analyse du Réseau Ferre",
     layout="wide",
 )
 
-st.title("🚇 Tableau de Bord IDFM - Réseau Ferré")
-st.markdown("**Où et quand le réseau souffre-t-il le plus ?**")
+st.title("Tableau de Bord IDFM - Réseau Ferre")
+st.markdown("**Ou et quand le reseau souffre-t-il le plus ?**")
 
-# =====================================================
-# MAPPING DES LIGNES ET JOURS
-# =====================================================
-
-# CORRECTION : Mapping complet des codes STIF aux noms de lignes IDFM
 STIF_TO_LIGNE = {
     100: "RER A",
     760: "RER B",
@@ -56,7 +40,6 @@ STIF_TO_LIGNE = {
     880: "Transilien U",
 }
 
-# Mapping des codes de jour-type
 JOUR_TYPE_MAPPING = {
     "DIJFP": "Lundi-Vendredi",
     "JOHV": "Samedi",
@@ -66,48 +49,34 @@ JOUR_TYPE_MAPPING = {
 }
 
 def map_ligne_code_to_name(code):
-    """Convertir un code de ligne en nom (ex: 100 -> 'RER A')"""
     try:
         code_int = int(code) if not isinstance(code, int) else code
         return STIF_TO_LIGNE.get(code_int, str(code))
     except (ValueError, TypeError):
-        # Si la conversion en int échoue, utiliser le code tel quel
         return str(code)
 
 def map_jour_type(jour_code):
-    """Convertir un code de jour-type en nom lisible"""
     return JOUR_TYPE_MAPPING.get(str(jour_code), str(jour_code))
 
-# Cache pour les stations
 _STATION_CACHE = {}
 _STATION_CACHE_LOADED = False
 
-
-# Inverser le mapping pour les recherches rapides
-# Créer un mapping qui accepte TOUS les types possibles (int, str, numpy)
 _REVERSE_STATION_MAPPING = {}
 for station_name, ids in STATION_MAPPING.items():
     for sid in ids:
-        # Ajouter comme entier ET comme string pour couvrir tous les cas
-        _REVERSE_STATION_MAPPING[sid] = station_name  # int
-        _REVERSE_STATION_MAPPING[str(sid)] = station_name  # string
+        _REVERSE_STATION_MAPPING[sid] = station_name
+        _REVERSE_STATION_MAPPING[str(sid)] = station_name
         try:
-            _REVERSE_STATION_MAPPING[int(sid)] = station_name  # force int
+            _REVERSE_STATION_MAPPING[int(sid)] = station_name
         except (ValueError, TypeError):
             pass
 
 def load_station_cache():
-    """Charge tout le cache des stations au démarrage"""
     global _STATION_CACHE, _STATION_CACHE_LOADED
-    
     if _STATION_CACHE_LOADED:
         return
-    
-    # D'abord, charger le mapping statique
     _STATION_CACHE.update(_REVERSE_STATION_MAPPING)
-    
     try:
-        # Authentifier directement
         resp = requests.post(
             f"{API_URL}/auth/login",
             data={"username": LOGIN_USER, "password": LOGIN_PASSWORD},
@@ -116,8 +85,6 @@ def load_station_cache():
         if resp.ok:
             token = resp.json()["access_token"]
             headers = {"Authorization": f"Bearer {token}"}
-            
-            # Charger TOUTES les pages de stations
             page = 1
             while True:
                 resp = requests.get(
@@ -129,12 +96,9 @@ def load_station_cache():
                 if resp.ok:
                     data = resp.json()
                     stations_data = data.get("data", [])
-                    
                     if not stations_data:
                         break
-                    
                     for station in stations_data:
-                        # Essayer plusieurs noms de colonnes possibles
                         station_id = station.get("id_station")
                         station_name = (
                             station.get("nom_station") or 
@@ -142,56 +106,30 @@ def load_station_cache():
                             station.get("name") or
                             station.get("station_name")
                         )
-                        
                         if station_id is not None and station_name:
                             _STATION_CACHE[station_id] = station_name
-                    
                     page += 1
                 else:
                     break
-                    
-    except Exception as e:
+    except Exception:
         pass
-    
     _STATION_CACHE_LOADED = True
 
-
 def get_station_name(df, station_id):
-    """
-    Récupère le nom de la station directement depuis le dataframe chargé,
-    sans avoir besoin de dictionnaire statique.
-    """
     row = df[df['id_station'] == station_id]
     if not row.empty:
         return row.iloc[0]['nom_station']
     return str(station_id)
 
 def clean_dataframe(df, mapping_config):
-    """
-    Nettoie un dataframe en remplaçant tous les IDs par des noms lisibles
-    
-    mapping_config = {
-        'ligne': map_ligne_code_to_name,
-        'jour_type': map_jour_type,
-        'id_station': get_station_name,
-        'date': lambda x: str(x),
-    }
-    """
     df_copy = df.copy()
-    
     for col, mapper_func in mapping_config.items():
         if col in df_copy.columns:
             df_copy[col] = df_copy[col].apply(lambda x: mapper_func(x) if pd.notna(x) else "N/A")
-    
     return df_copy
-
-# =====================================================
-# ACCES A L'API
-# =====================================================
 
 @st.cache_data(ttl=600)
 def get_token():
-    """Authentifie auprès de l'API"""
     try:
         resp = requests.post(
             f"{API_URL}/auth/login",
@@ -201,21 +139,17 @@ def get_token():
         resp.raise_for_status()
         return resp.json()["access_token"]
     except Exception as e:
-        st.error(f"❌ Erreur d'authentification : {e}")
+        st.error(f"Erreur d'authentification : {e}")
         return None
-
 
 @st.cache_data(ttl=600)
 def fetch_datamart(endpoint, page_size=5000):
-    """Récupère les données du datamart"""
     token = get_token()
     if not token:
         return pd.DataFrame()
-
     headers = {"Authorization": f"Bearer {token}"}
     rows = []
     page = 1
-
     try:
         while True:
             resp = requests.get(
@@ -226,46 +160,31 @@ def fetch_datamart(endpoint, page_size=5000):
             )
             resp.raise_for_status()
             data = resp.json()
-            
             if not data.get("data"):
                 break
-            
             rows.extend(data["data"])
             page += 1
-
         df = pd.DataFrame(rows)
-        
-        # Si données vides ou invalides, utiliser fallback local
         if df.empty or (endpoint == "regularite-lignes" and df["taux_ponctualite"].sum() == 0):
-            st.warning(f"⚠️ API retourne des données invalides, chargement depuis CSV local...")
+            st.warning("API retourne des donnees invalides, chargement depuis CSV local...")
             return load_regularite_local() if endpoint == "regularite-lignes" else pd.DataFrame()
-        
         return df
     except Exception as e:
-        st.warning(f"⚠️ Chargement API échoué pour {endpoint}, tentative CSV local...")
-        # Fallback CSV local
+        st.warning(f"Chargement API echoue pour {endpoint}, tentative CSV local...")
         return load_regularite_local() if endpoint == "regularite-lignes" else pd.DataFrame()
 
-
 def load_regularite_local():
-    """Charger les données de régularité depuis CSV local"""
     import configparser
     import os
-    
     try:
         config = configparser.ConfigParser()
         config_path = os.path.normpath(
             os.path.join(os.path.dirname(__file__), "..", "config", "config.ini")
         )
         config.read(config_path)
-        
         ponctualite_csv = config["local"]["ponctualite_csv_path"]
         df = pd.read_csv(ponctualite_csv, delimiter=';')
-        
-        # Nettoyer les noms de colonnes (supprimer espaces inutiles)
         df.columns = df.columns.str.strip()
-        
-        # Mapping des colonnes attendues
         column_mapping = {}
         for old_col in df.columns:
             if old_col == 'Date':
@@ -274,57 +193,41 @@ def load_regularite_local():
                 column_mapping[old_col] = 'ligne'
             elif old_col == 'Nom de la ligne':
                 column_mapping[old_col] = 'nom_ligne'
-            elif 'Taux de ponctualité' in old_col:
+            elif 'Taux de ponctualite' in old_col:
                 column_mapping[old_col] = 'taux_ponctualite'
             elif 'voyageurs' in old_col.lower() or 'retard' in old_col.lower():
                 column_mapping[old_col] = 'delai_moyen'
-        
         df = df.rename(columns=column_mapping)
-        
-        # Convertir taux_ponctualite en float (IMPORTANT!)
         if 'taux_ponctualite' in df.columns:
             df['taux_ponctualite'] = pd.to_numeric(
                 df['taux_ponctualite'].astype(str).str.replace(',', '.'), 
                 errors='coerce'
             )
-        
-        # Ajouter rang (ranking)
         if 'date' in df.columns and 'taux_ponctualite' in df.columns:
             df['rang_regularite'] = df.groupby('date')['taux_ponctualite'].rank(method='min', ascending=False)
-        
-        # Vérification
-        print(f"✅ CSV régularité chargé: {len(df)} lignes, mean taux_ponctualite = {df['taux_ponctualite'].mean():.2f}%")
-        
+        print(f"CSV regularite charge: {len(df)} lignes, mean taux_ponctualite = {df['taux_ponctualite'].mean():.2f}%")
         return df
     except Exception as e:
-        print(f"❌ Erreur chargement CSV régularité: {e}")
+        print(f"Erreur chargement CSV regularite: {e}")
         import traceback
         traceback.print_exc()
         return pd.DataFrame()
 
-
-# =====================================================
-# INTERFACE PRINCIPALE
-# =====================================================
-
-# ✨ Charger le cache des stations au démarrage
 load_station_cache()
 
-# Guide d'utilisation
-with st.expander("📖 Guide rapide"):
+with st.expander("Guide rapide"):
     st.markdown("""
     ### Qu'est-ce que ce dashboard ?
-    Analyse des données de fréquentation et régularité du réseau IDFM (Métro + RER).
+    Analyse des donnees de frequentation et regularite du reseau IDFM (Metro + RER).
     
-    ### Seuils clés
-    - 🔴 **Saturation** : > 7% du trafic quotidien
-    - 🟠 **Ponctualité critique** : < 80%
-    - 🟢 **Objectif IDFM** : > 95% de ponctualité
+    ### Seuils cles
+    - Saturation : > 7% du trafic quotidien
+    - Ponctualite critique : < 80%
+    - Objectif IDFM : > 95% de ponctualite
     """)
 
-# Sélection du datamart
 datamart_choice = st.selectbox(
-    "📊 Sélectionnez une analyse :",
+    "Selectionnez une analyse :",
     ["frequentation-stations", "regularite-lignes", "evolution-temporelle", "saturation-ml"]
 )
 
