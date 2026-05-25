@@ -1,0 +1,25 @@
+# Fichiers Python compilés
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Dossier des logs (pour ne pas pousser les logs de 200 Mo !)
+logs/
+
+# Dossier de configuration local (attention à ne pas pousser les mots de passe)
+# Si tu veux pousser un modèle, renomme ton config.ini en config.ini.template
+# et ignore le config.ini réel.
+config/config.ini
+
+# Dossiers temporaires Spark / HDFS
+metastore_db/
+derby.log
+spark-warehouse/
+
+# Fichiers système
+.DS_Store
+.vscode/
+
+# Fichiers de données (si trop lourds pour Git)
+data/*.csv

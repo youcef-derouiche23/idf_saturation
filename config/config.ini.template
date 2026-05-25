@@ -1,0 +1,41 @@
+[api]
+api_url = http://localhost:8000
+login_user = admin
+login_password = admin
+db_host = localhost
+db_port = 5432
+db_name = idfm_datamarts
+db_user = youcef
+db_password = 
+
+[local]
+log_dir = logs
+validations_csv_path = data/validations_2025.csv
+stations_csv_path = data/arrets.csv
+regularite_csv_path = data/histo-validations-reseau-ferre.csv
+ponctualite_csv_path = data/ponctualite-mensuelle-transilien.csv
+
+[hdfs]
+raw_validations_path = hdfs://localhost:9000/raw/validations
+raw_stations_path = hdfs://localhost:9000/raw/stations
+raw_regularite_path = hdfs://localhost:9000/raw/regularite
+silver_path = hdfs://localhost:9000/silver
+
+[spark]
+master = local[*]
+app_name_feeder = idfm_feeder
+app_name_processor = idfm_processor
+app_name_datamart = idfm_datamart
+
+[hive]
+database = idfm_silver
+table_validations = validations_enrichies
+
+[postgres]
+jdbc_url = jdbc:postgresql://localhost:5432/idfm_datamarts
+jdbc_driver_path = /Users/youcef/Downloads/idf_saturation-feat-pipeline-final/drivers/postgresql-42.7.3.jar
+user = youcef
+password = 
+
+[thresholds]
+saturation_threshold = 7
