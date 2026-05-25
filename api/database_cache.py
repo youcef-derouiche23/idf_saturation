@@ -1,34 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-database_cache.py - Gestion des datamarts en cac        dm1 = df_validations.copy()
-        
-        # Convertir les colonnes en types appropriés avec gestion des erreurs
-        if 'code_stif_arret' in dm1.columns:
-            dm1['id_station'] = pd.to_numeric(dm1['code_stif_arret'], errors='coerce').fillna(0).astype(int)
-        else:
-            dm1['id_station'] = 0
-            
-        if 'code_stif_trns' in dm1.columns:
-            dm1['ligne'] = dm1['code_stif_trns'].fillna('').astype(str)
-        else:
-            dm1['ligne'] = ''
-            
-        if 'trnc_horr_60' in dm1.columns:
-            dm1['heure'] = dm1['trnc_horr_60'].fillna('').astype(str)
-        else:
-            dm1['heure'] = ''
-            
-        if 'cat_jour' in dm1.columns:
-            dm1['jour_type'] = dm1['cat_jour'].fillna('').astype(str)
-        else:
-            dm1['jour_type'] = ''
-            
-        if 'pourcentage_validations' in dm1.columns:
-            dm1['pourcentage_validations'] = pd.to_numeric(dm1['pourcentage_validations'], errors='coerce').fillna(0)
-        else:
-            dm1['pourcentage_validations'] = 0
-            
-        dm1['nb_validations'] = (dm1['pourcentage_validations'] * 100).round(0)ire (CSV)
+database_cache.py - Gestion des datamarts en cache (CSV)
 Alternative à PostgreSQL pour développement local
 """
 

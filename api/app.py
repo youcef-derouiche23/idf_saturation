@@ -38,17 +38,25 @@ CONFIG_PATH = os.environ.get(
 )
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 # Essayer PostgreSQL, sinon utiliser le cache en mémoire
+DB_MODE = None
+db = None
+
 try:
+    logger.info(f"🔍 Tentative connexion PostgreSQL...")
+    logger.info(f"   CONFIG_PATH = {CONFIG_PATH}")
     db = Database(CONFIG_PATH)
+    logger.info(f"   Host: {db.host}, Port: {db.port}, DB: {db.dbname}, User: {db.user}")
     db.connect()
     logger.info("✅ PostgreSQL disponible - mode production")
     DB_MODE = "postgres"
 except Exception as e:
     logger.warning(f"⚠️ PostgreSQL indisponible: {e}")
-    logger.info("📦 Utilisation du mode cache en mémoire (CSV)")
-    db = DatabaseCache(CONFIG_PATH)
+    logger.info("📦 Initialisation du mode cache (chargement des CSV en arrière-plan)...")
+    # Ne pas charger les CSV ici - le faire au premier appel
+    db = None
     DB_MODE = "cache"
 
 # Map des endpoints vers (table SQL, colonnes de tri)
@@ -94,9 +102,19 @@ app.add_middleware(
 # ENDPOINT PUBLIC : SANTE DE L'API
 # =====================================================
 
+def ensure_db_initialized():
+    """Initialise le DB en lazy-loading au premier appel"""
+    global db, DB_MODE
+    if db is None and DB_MODE == "cache":
+        logger.info("🔨 Chargement des datamarts en cache (premier appel)...")
+        db = DatabaseCache(CONFIG_PATH)
+        logger.info("✅ Cache chargé et prêt")
+    return db
+
 @app.get("/", tags=["Santé"])
 def health():
     """Vérifie que l'API répond et liste les datamarts disponibles."""
+    ensure_db_initialized()
     return {
         "status": "ok",
         "service": "IDFM Fréquentation & Régularité",
@@ -155,6 +173,7 @@ def get_frequentation_stations(
     - Ranking des stations saturées par ligne
     - Agrégées par jour de la semaine
     """
+    ensure_db_initialized()
     try:
         table, order_by = DATAMARTS["frequentation-stations"]
         
@@ -194,6 +213,7 @@ def get_regularite_lignes(
     - Total retards et délai moyen
     - Ranking des lignes par régularité (des moins aux plus régulières)
     """
+    ensure_db_initialized()
     try:
         table, order_by = DATAMARTS["regularite-lignes"]
         
@@ -233,6 +253,7 @@ def get_evolution_temporelle(
     - Jour de la semaine et détection période de vacances
     - Évolution vs semaine précédente (%)
     """
+    ensure_db_initialized()
     try:
         table, order_by = DATAMARTS["evolution-temporelle"]
         
@@ -277,6 +298,7 @@ def get_saturation_ml(
 
     **Cas d'usage :** Entraîner un modèle pour prédire si une heure sera saturée
     """
+    ensure_db_initialized()
     try:
         table, order_by = DATAMARTS["saturation-ml"]
         
@@ -313,6 +335,7 @@ def get_stations(
     page_size: int = Query(100, ge=1, le=10000)
 ):
     """Retourne la liste des stations/arrêts"""
+    ensure_db_initialized()
     try:
         sql = "SELECT * FROM stations ORDER BY id_station"
         result = db.query_paginated(sql, page=page, page_size=page_size)
@@ -339,6 +362,7 @@ def get_validations(
     ligne: str = Query(None)
 ):
     """Retourne les validations. Filtre optionnel par ligne."""
+    ensure_db_initialized()
     try:
         if ligne:
             sql = f"SELECT * FROM validations WHERE ligne = '{ligne}' ORDER BY id_station, heure"
@@ -369,6 +393,7 @@ def get_regularite(
     ligne: str = Query(None)
 ):
     """Retourne les données de régularité. Filtre optionnel par ligne."""
+    ensure_db_initialized()
     try:
         if ligne:
             sql = f"SELECT * FROM regularite WHERE ligne = '{ligne}' ORDER BY date DESC"
@@ -394,6 +419,7 @@ def get_regularite(
 )
 def get_stats_lignes():
     """Retourne des statistiques par ligne"""
+    ensure_db_initialized()
     try:
         sql = """
         SELECT 
@@ -419,6 +445,7 @@ def get_stats_lignes():
 )
 def get_stats_stations():
     """Retourne les stations avec le plus de validations"""
+    ensure_db_initialized()
     try:
         sql = """
         SELECT 

@@ -24,23 +24,27 @@ class Database:
         self.config.read(config_path)
 
         self.host = self.config["api"].get("db_host", "localhost")
-        self.port = int(self.config["api"].get("db_port", 5433))
+        self.port = int(self.config["api"].get("db_port", 5432))
         self.dbname = self.config["api"].get("db_name", "idfm_datamarts")
-        self.user = self.config["api"].get("db_user", "idfm_user")
-        self.password = self.config["api"].get("db_password", "idfm_pass")
+        self.user = self.config["api"].get("db_user", "youcef")
+        self.password = self.config["api"].get("db_password", None) or None  # None si vide
 
         self.conn = None
 
     def connect(self):
         """Établit la connexion à PostgreSQL"""
         try:
-            self.conn = psycopg2.connect(
-                host=self.host,
-                port=self.port,
-                database=self.dbname,
-                user=self.user,
-                password=self.password,
-            )
+            # Construire les kwargs pour éviter de passer password='' qui cause des erreurs
+            kwargs = {
+                "host": self.host,
+                "port": self.port,
+                "database": self.dbname,
+                "user": self.user,
+            }
+            if self.password:  # Seulement si le mot de passe n'est pas vide
+                kwargs["password"] = self.password
+            
+            self.conn = psycopg2.connect(**kwargs)
         except psycopg2.Error as e:
             raise Exception(f"Erreur de connexion PostgreSQL : {e}")
 
